@@ -1,5 +1,6 @@
 import pandas as pd
 import statistics
+import numpy as np
 
 
 class risk:
@@ -66,13 +67,18 @@ class risk:
         self.high_threshold = statistics.mean(convertedHigh)
         
 
+
+    
+
+
 class Patient:
     def __init__(self, name, medication_df_path, threshold_df_path = None):
         self.name = name 
         self.totalMorphine = 0 
-        self.riskLevel = "high" 
+        self.riskLevel = "" 
         self.medication_df = pd.read_csv(medication_df_path)
         self.lastDose = self.medication_df.tail(1)
+        self.days = self.medication_df.shape[0]
         self.totalMorphine = 0
         if threshold_df_path != None:
             self.risk_object = risk(threshold_df_path)
@@ -82,8 +88,8 @@ class Patient:
 
        
     def get_risk(self):
-        low_threshold = self.risk_object.low_threshold
-        high_threshold = self.risk_object.high_threshold
+        low_threshold = (self.risk_object.low_threshold)*self.days
+        high_threshold = (self.risk_object.high_threshold)*self.days
         if self.totalMorphine < low_threshold:
             self.riskLevel = "low"
         elif self.totalMorphine >= low_threshold and self.totalMorphine < high_threshold:
@@ -113,6 +119,91 @@ class Patient:
 
         #sum 'equivalent' column to get total morphine equivalents
         self.totalMorphine = sum(output_table['Equivalent'])
+
+
+class Taper:
+    def __init__(self, patient):
+        self.risk = patient.riskLevel
+        self.last_drug = patient.lastDose.iloc[0]['Drug']
+        self.last_dose = patient.lastDose.iloc[0]['Dose']
+        self.schedule = pd.DataFrame()
+
+
+
+
+    def get_taper_schedule(self):
+
+        def convert_drug(from_drug, value):
+            drugs = {
+            "Codeine": 0.15,
+            "Fentanyl": 0.0576,
+            "Hydrocodone": 1,
+            "Hydromorphone": 4,
+            "Morphine": 1,
+            "Oxycodone": 1.5,
+            "Oxymorphone": 3
+            }
+            new_value = value * (drugs[from_drug])
+            return new_value
+
+        Converted_last_dose = convert_drug(self.last_drug,self.last_dose)
+
+        def fasttaper(Converted_last_dose): 
+            dose = Converted_last_dose
+            schedule = []
+            days = []
+            newdose = dose/4
+            target = newdose*.2
+            schedule.append(newdose)
+            days.append(1)
+            i = 2
+
+            while newdose > target: 
+                newdose -= target
+                schedule.append(newdose)
+                days.append(i)
+                i += 1
+
+            interval = [4,3,2,1]
+            for i in range(len(days)-4): 
+                interval.append(1)
+
+            perdose = [i / j for i,j in zip(schedule, interval)]
+            interval = [int(24/i) for i in interval]
+            
+            return(list(zip(days,schedule,perdose,interval)))
+
+
+        def medtaper(Converted_last_dose): 
+            dose = Converted_last_dose
+            schedule = []
+            days = []
+            newdose = dose/4
+            target = newdose*.1
+            schedule.append(newdose)
+            days.append(1)
+            i = 2
+
+            while newdose > target: 
+                newdose -= target
+                schedule.append(newdose)
+                days.append(i)
+                i += 1
+                
+            interval = [4,3,2,1]
+            for i in range(len(days)-4): 
+                interval.append(1)
+
+            perdose = [i / j for i,j in zip(schedule, interval)]
+            interval = [int(24/i) for i in interval]
+            
+            return(list(zip(days,schedule,perdose,interval)))
+
+        if self.risk == "medium":
+            self.schedule = fasttaper(Converted_last_dose)
+        elif self.risk == "high":
+            self.schedule = medtaper(Converted_last_dose)
+            
 
 
 
